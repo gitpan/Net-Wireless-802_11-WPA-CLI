@@ -1,0 +1,12 @@
+Revision history for Net-Wireless-802_11-WPA-CLI
+
+1.0.0	2011-08-16/03:05
+		-Rename to Net::Wireless::802_11::WPA::CLI.
+
+0.1.1	 2011-07-01/18:10
+		 -Fix POD issues.
+		 -Update name post marriage.
+		 -Minor cleanups.
+
+0.1.0	 2008-04-06/19:00
+		 -Initial release.
