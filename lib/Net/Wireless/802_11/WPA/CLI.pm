@@ -2,6 +2,8 @@ package Net::Wireless::802_11::WPA::CLI;
 
 use warnings;
 use strict;
+use base 'Error::Helper';
+use String::ShellQuote;
 
 =head1 NAME
 
@@ -9,11 +11,11 @@ Net::Wireless::802_11::WPA::CLI - Provides a interface to wpa_cli.
 
 =head1 VERSION
 
-Version 1.0.0
+Version 2.0.0
 
 =cut
 
-our $VERSION = '1.0.0';
+our $VERSION = '2.0.0';
 
 
 =head1 SYNOPSIS
@@ -29,29 +31,44 @@ our $VERSION = '1.0.0';
 
 This initializes the object to be used for making use of wpa_cli.
 
-It takes no arguements and returns undef upon failure.
+    my $foo->Net::Wireless::802_11::WPA::CLI->new();
+    if( $foo->error ){
+	    warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub new {
-	#tests if it is usable.
-	my $status=`wpa_cli status`;
-	if (!$? == 0){
-		warn("wpa_cli failed with '".$status."'");
-		return undef;
+	my $socket=$_[1];
+
+	my $self = {
+		status=>undef,
+		error=>undef,
+		errorString=>'',
+		perror=>undef,
+		socket=>'-p '.shell_quote($socket),
+		module=>'Net-Wireless-802_11-WPA-CLI',
 	};
+	bless $self;
+
+	#tests if it is usable.
+	my $command='wpa_cli '.$self->{socket}.' status';
+	my $status=`$command`;
+	if (!$? == 0){
+		$self->{error}=1;
+		$self->{errorString}='"'.$command.'" failed with "'.$status.'"';
+		$self->warn;
+		return $self;
+	}
 
 	my %statusH=status_breakdown($status);
-	if (!defined($status)){
-		return undef;
+	if ($self->error){
+		$self->{perror}=1;
+		return $self;
 	};
-	
-	my $self = {status=>{%statusH}};
-	
-	
-	bless $self;
 
-	bless $self;
+	$self->{status}=\%statusH;
+
 	return $self;
 }
 
@@ -59,21 +76,35 @@ sub new {
 
 This function gets the current status from wpa_cli.
 
-It takes no arguements and returns undef upon failure.
+No arguments are taken.
 
+    my %status=$foo->status;
+    if( $foo->error ){
+	    warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
+    
 =cut
 
 sub status{
 	my ($self, $statusS)= @_;
+	my $method='status';
 
-	my $status=`wpa_cli status`;
+	if(! $self->errorblank){
+		return undef;
+	}
+
+	my $command='wpa_cli '.$self->{socket}.' status';
+	my $status=`$command`;
 	if (!$? == 0){
-		warn("wpa_cli failed with '".$status."'");
+		$self->{error}=3;
+		$self->{errorString}='"'.$command.'" failed with "'.$status.'"';
+		$self->warn;
 		return undef;
 	}
 	
 	my %statusH=status_breakdown($status);
-	if (!defined($status)){
+	if ($self->error){
+		$self->warnString('status_breakdown failed');
 		return undef;
 	}
 	
@@ -87,12 +118,21 @@ sub status{
 This saves the current configuration. The user requesting this
 does not need write permissions to file being used 
 
-It takes no arguements and returns undef upon failure.
+No arguments are taken.
+
+	my $returned=$foo->save_config;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub save_config{
 	my ($self)= @_;
+
+	if(! $self->errorblank){
+		return undef;
+	}
 
 	return $self->run_TF_command('save_config');
 }
@@ -102,33 +142,52 @@ sub save_config{
 This saves the current configuration. The user requesting this
 does not need write permissions to file being used 
 
-It takes no arguements and returns undef upon failure.
+It takes no arguments.
+
+    $foo->reassociate;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub reassociate{
 	my ($self)= @_;
 
-	return $self->run_TF_command('reassociate');
+	if(! $self->errorblank){
+		return undef;
+	}
+
+	return $self->run_TF_command('reassociate', 0);
 }
 
 =head2 set_network
 
-	$return=$obj->set_network($networkID, $variable, $value)
-
 This sets a variable for for a specific network ID.
 
-The return of undef indicates a error with running wpa_cli, other wise
-it is a true or false for if it worked.
+Three arguments are taken. The first is the network ID,
+the second is the variable to set, and the third is the
+value to set it to.
+
+	$foo->set_network($networkID, $variable, $value);
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub set_network{
 	my ($self, $nid, $variable, $value)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -137,21 +196,29 @@ sub set_network{
 
 =head2 get_network
 
-	$return=$obj->get_network($networkID, $variable)
-
 This gets a variable for for a specific network ID.
 
-The return of undef indicates a error with running wpa_cli or a failure
-is returned. Otherwise it is what ever the variable was set to.
+Two arguments are taken and that is the network ID and variable.
+
+	$value=$foo->get_network($networkID, $variable);
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub get_network{
 	my ($self, $nid, $variable)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -179,21 +246,29 @@ sub get_network{
 
 =head2 pin
 
-	$return=$obj->pin($networkID, $value)
-
 This sets the pin for a network.
 
-The return of undef indicates a error with running wpa_cli  or non-numeric
-network ID, other wise it is a true or false for if it worked.
+Two arguments are taken. The first is the network ID and the second is the pin.
+
+	$foo->pin($networkID, $newpin);
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub pin{
 	my ($self, $nid, $value)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -202,21 +277,30 @@ sub pin{
 
 =head2 new_password
 
-	$return=$obj->new_password($networkID, $value)
-
 This sets a new password for a network.
 
-The return of undef indicates a error with running wpa_cli or non-numeric
-network ID, other wise it is a true or false for if it worked.
+Two arguments are taken. The first is the network ID and
+the second is the new password.
+
+	$return=$foo->new_password($networkID, $newpass);
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub new_password{
 	my ($self, $nid, $value)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -225,28 +309,37 @@ sub new_password{
 
 =head2 add_network
 
-	$return=$obj->add_network()
-
 This adds a network.
 
-The returned value is the numeric ID of the new network. A
-return of UNDEF indicates some error.
+No arguments are taken.
+
+The returned value is a the new network ID.
+
+	$newNetworkID=$foo->add_network;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub add_network{
 	my ($self)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
 
 	my $returned=$self->run_command('add_network');
 
 	#this means there was a error running wpa_cli
-	if(!defined($returned)){
+	if($self->error){
 		return undef;
 	}
 
 	#this means it failed
 	if ($returned =~ /.*\nFAIL\n/){
+		$self->{error}=5;
+		$self->{errorString}='The commaned outputed a status of FAIL, but exited zero';
 		return undef;
 	}
 	
@@ -260,22 +353,29 @@ sub add_network{
 
 =head2 remove_network
 
-	$return=$obj->remove_network($networkID)
+This removes the specified network.
 
-This sets a one-time-password a network.
+One argument is accepted and it the network ID.
 
-The return of undef indicates a error with running wpa_cli or
-non-numeric network ID, other wise it is a true or false for if
-it worked.
+	$return=$foo->remove_network($networkID)
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub remove_network{
 	my ($self, $nid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -284,22 +384,29 @@ sub remove_network{
 
 =head2 select_network
 
-	$return=$obj->select_network($networkID)
-
 This is the network ID to select, while disabling the others.
 
-The return of undef indicates a error with running wpa_cli or
-a non-numeric network ID, other wise it is a true or false for
-if it worked.
+One argument is accepted and it is the network ID to select.
+
+	$return=$foo->select_network($networkID)
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub select_network{
 	my ($self, $nid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -308,22 +415,29 @@ sub select_network{
 
 =head2 enable_network
 
-	$return=$obj->enable_network($networkID)
-
 This enables a network ID.
 
-The return of undef indicates a error with running wpa_cli or
-a non-numeric network ID, other wise it is a true or false for
-if it worked.
+One argument is required and that is the network ID to enable.
+
+	$foo->enable_network($networkID)
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub enable_network{
 	my ($self, $nid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -332,22 +446,29 @@ sub enable_network{
 
 =head2 disable_network
 
-	$return=$obj->disable_network($networkID)
-
 This disables a network ID.
 
-The return of undef indicates a error with running wpa_cli or
-a non-numeric network ID, other wise it is a true or false for
-if it worked.
+One argument is required and that is the network ID in question.
+
+	$foo->disable_network($networkID)
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub disable_network{
 	my ($self, $nid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
@@ -356,90 +477,107 @@ sub disable_network{
 
 =head2 reconfigure
 
-	$return=$obj->reconfigure($networkID)
-
 This causes wpa_supplicant to reread it's configuration file.
 
-The return of undef indicates a error with running wpa_cli,
-other wise it is a true or false for if it worked.
+No arguments are taken.
+
+	$return=$obj->reconfigure;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub reconfigure{
 	my ($self)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
 
 	return $self->run_TF_command('reconfigure', 0);
 }
 
 =head2 preauthenticate
 
-	$return=$obj->preauthenticate($BSSID)
-
 Force preauthentication for a BSSID.
 
-The return of undef indicates a error with running wpa_cli or
-a non-numeric network ID, other wise it is a true or false for
-if it worked.
+One argument is accepted and the is the BSSID in question.
+
+	$foo->preauthenticate($BSSID);
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub preauthenticate{
 	my ($self, $bssid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	return $self->run_TF_command('preauthenticate '.$bssid, 0);
 }
 
 =head2 disconnect
 
-	$return=$obj->disconnect()
-
 Disconnect and wait for a reassosiate command.
 
-The return of undef indicates a error with running wpa_cli or
-a non-numeric network ID, other wise it is a true or false for
-if it worked.
+No arguments are taken.
+
+	$return=$foo->disconnect;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub disconnect{
 	my ($self, $bssid)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	return $self->run_TF_command('disconnect'. 0);
 }
 
-=head2 list_network
-
-	%return=$obj->get_network($networkID, $variable)
+=head2 list_networks
 
 This lists the configured networks.
 
-The return of undef indicates a error with running wpa_cli or a failure
-is returned. Otherwise a hash is returned.
+No arguments are taken.
 
 They keys for the hash are the network IDs. The value of each is another hash.
 It contians the SSID, BSSID, and flag. All keys are lower case.
 
+	%return=$foo->list_networks;
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
+
 =cut
 
-sub list_network{
-	my ($self, $nid, $variable)= @_;
+sub list_networks{
+	my ($self)= @_;
 
-	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if(! $self->errorblank){
 		return undef;
 	}
 
-	my $returned=$self->run_command('list_network');
+	my $returned=$self->run_command('list_networks');
 
 	#this means there was a error running wpa_cli
-	if(!defined($returned)){
+	if($self->error){
 		return undef;
 	}
 
 	#this means it failed
 	if ($returned =~ /.*\nFAIL\n/){
+		$self->{error}=5;
+		$self->{errorString}='The commaned outputed a status of FAIL, but exited zero';
 		return undef;
 	}
 	
@@ -481,36 +619,45 @@ sub list_network{
 
 =head2 mib
 
-	%return=$obj->get_network($networkID, $variable)
-
 This lists the configured networks.
 
-The return of undef indicates a error with running wpa_cli or a failure
-is returned. Otherwise a hash is returned.
+Unless it errored, a hash is returned.
 
 They keys for the hash are the network IDs. The value of each is another hash.
 It contians the SSID, BSSID, and flag. All keys are lower case.
+
+	%return=$foo->get_network($networkID, $variable);
+    if( $foo->error ){
+	    warn('error:'.$foo->error.': '.$foo->errorString);
+	}
 
 =cut
 
 sub mib{
 	my ($self, $nid, $variable)= @_;
 
+	if(! $self->errorblank){
+		return undef;
+	}
+
 	#return if the netword ID is not numeric.
-	if ($nid =~ /[0123456789]*/){
-		warn('non-numeric network ID used');
+	if ($nid !~ /^[0123456789]*$/){
+		$self->{error}=4;
+		$self->{errorString}='non-numeric network ID used';
+		$self->warn;
 		return undef;
 	}
 
 	my $returned=$self->run_command('mib');
 
-	#this means there was a error running wpa_cli
-	if(!defined($returned)){
+	if($self->error){
 		return undef;
 	}
 
 	#this means it failed
 	if ($returned =~ /.*\nFAIL\n/){
+		$self->{error}=5;
+		$self->{errorString}='The commaned outputed a status of FAIL, but exited zero';
 		return undef;
 	}
 	
@@ -521,31 +668,44 @@ sub mib{
 
 =head2 run_TF_command
 
-	$returned=$obj->run_TF_command($command, 0)
-
 This runs a arbirary command in which the expected values are
 either 'FAIL' or 'OK'. This function is largely intended for internal
 use by this module.
 
-It takes two arguement. The first is string containing the command and any
-arguements for it. The second is what to return on a unknown return.
+It takes two argument. The first is string containing the command and any
+arguments for it. The second is what to return on a unknown return.
 
-UNDEF is returned upon with running wpa_cli. Other wise a per boolean value
-is returned set to the corresponding success of the command.
+A status of 'FAIL' will also set a error of 5.
+
+A unknown status will also set a error of 6.
+
+	$returned=$foo->run_TF_command($command, 0);
+    if( $foo->error ){
+	    warn('error:'.$foo->error.': '.$foo->errorString);
+	}
 
 =cut
 
 sub run_TF_command{
 	my ($self, $command, $onend)= @_;
 
-	my $status=`wpa_cli $command`;
+	if(! $self->errorblank){
+		return undef;
+	}
+
+	my $torun='wpa_cli '.$self->{socket}.' '.$command;
+	my $status=`$torun`;
 	if (!$? == 0){
-		warn("wpa_cli failed with '".$status."'"."for '".$command."'");
+		$self->{error}=3;
+		$self->{errorString}="wpa_cli failed with '".$status."'"."for '".$command."'";
+		$self->warn;
 		return undef;
 	}
 
 	#return 0 upon failure
 	if ($status =~ /.*\nFAIL\n/){
+		$self->{error}=5;
+		$self->{errorString}='The commaned outputed a status of FAIL, but exited zero';
 		return 0;
 	}
 
@@ -554,28 +714,40 @@ sub run_TF_command{
 		return 1;
 	}
 
+	#unknwon so set error 6
+	$self->{error}=6;
+	$self->{errorString}='Unknown return of "'.$status.'"';
+
 	return $onend;
 }
 
 =head2 run_command
 
-	$returned=$obj->run_command($command)
-
 This runs a arbirary command in which. This function is largely intended for
 internal use by this module.
 
-It takes arguement, which is string containing the command and any
-arguements for it.
+It takes argument, which is string containing the command and any
+arguments for it.
 
 UNDEF is returned upon with running wpa_cli. Otherwise the return is the return
 from executed command.
+
+	$returned=$foo->run_command($command)
+    if( $foo->error ){
+        warn('Error:'.$foo->error.': '.$foo->errorString);
+    }
 
 =cut
 
 sub run_command{
 	my ($self, $command)= @_;
 
-	my $status=`wpa_cli $command`;
+	if(! $self->errorblank){
+		return undef;
+	}
+
+	my $torun='wpa_cli '.$self->{socket}.' '.$command;
+	my $status=`$torun`;
 	if (!$? == 0){
 		warn("wpa_cli failed with '".$status."'"."for '".$command."'");
 		return undef;
@@ -593,9 +765,13 @@ This is a internal function.
 #this is a internal function used by this module
 #It breaks down that return from status.
 sub status_breakdown{
-	my ($statusS, $type)= @_;
+	my ($self, $statusS, $type)= @_;
+
+	if(! $self->errorblank){
+		return undef;
+	}
 	
-	my %hash=();
+	my %hash;
 	
 	my @statusA=split(/\n/, $statusS);
 	
@@ -604,7 +780,9 @@ sub status_breakdown{
 	}
 	
 	if (! $statusA[0] =~ /^Selected interface/){
-		warn("Unexpected return from 'wpa_cli ".$type."': ".$statusA[0]);
+		$self->{error}=2;
+		$self->{errorString}="Unexpected return from 'wpa_cli ".$type."': ".$statusA[0].'"';
+		$self->warn;
 		return undef;
 	}
 	
@@ -631,6 +809,36 @@ interface and otp are not usable.
 
 Better documentation and etc shall be coming shortly. Publishing this and starting work
 on something that uses it in it's current form.
+
+=head1 ERROR CODES
+
+=head2 1
+
+Unable to to initialize the object. A wpa_cli status check failed.
+
+This error is permanent.
+
+=head2 2
+
+Status breakdown failed because of a unexpected return.
+
+=head2 3
+
+Command failed and exited with a non-zero.
+
+=head2 4
+
+Invalid argument supplies.
+
+=head2 5
+
+The executed command exited with zero, but still failed.
+
+This error code is not warned for.
+
+=head2 6
+
+Unknown return.
 
 =head1 AUTHOR
 

@@ -1,5 +1,11 @@
 Revision history for Net-Wireless-802_11-WPA-CLI
 
+2.0.0	 2011-08-18/08:15
+		 -Now uses Error::Helper.
+		 -Allows for a control socket to be specified.
+		 -Now depends on shell_quote.
+		 -Lots of cleanup in regards to error handling.
+
 1.0.0	2011-08-16/03:05
 		-Rename to Net::Wireless::802_11::WPA::CLI.
 
