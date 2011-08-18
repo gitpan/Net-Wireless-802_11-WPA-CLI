@@ -11,11 +11,11 @@ Net::Wireless::802_11::WPA::CLI - Provides a interface to wpa_cli.
 
 =head1 VERSION
 
-Version 2.0.1
+Version 2.0.2
 
 =cut
 
-our $VERSION = '2.0.1';
+our $VERSION = '2.0.2';
 
 
 =head1 SYNOPSIS
@@ -592,30 +592,25 @@ sub list_networks{
 	
 	my $returnedAint=2;
 	while(defined($returnedA[$returnedAint])){
-		#remove the extra spaces
-		$returnedA[$returnedAint]=~s/ //g;
-		
 		chomp($returnedA[$returnedAint]);
-		
-		my @linesplit=split(/ /, $returnedA[$returnedAint]);
-		
-		#finally do something with the hash
-		$hash{$linesplit[0]}={flag=>$linesplit[$#linesplit]};
-		
-		#get the bssid
-		my $bssidInt=$#linesplit-1;
-		$hash{$linesplit[0]}{bssid}=$linesplit[$bssidInt];
 
-		#rebuild the ssid part
+		my @linesplit=split(/\t/, $returnedA[$returnedAint]);
+
+		my $nid=$linesplit[0];
+
+		$hash{$nid}={flag=>$linesplit[$#linesplit]};
+
+		$hash{$nid}{bssid}=$linesplit[$#linesplit-1];
+
+		my $ssidIntMax=$#linesplit-2;
 		my $ssidInt=1;
-		my $ssidIntMax=$bssidInt-1;
-		$hash{$linesplit[$linesplit[0]]}{ssid}="";
-		while($ssidInt <= $ssidIntMax){
-			$hash{$linesplit[$linesplit[0]]}{ssid}=
-					$hash{$linesplit[$linesplit[0]]}{ssid}.$linesplit[$ssidInt];
-			
+		while( $ssidInt <= $ssidIntMax ){
+			$hash{$nid}{ssid}=$hash{$nid}{ssid}.' '.$linesplit[$ssidInt];
+
 			$ssidInt++;
 		}
+
+		$returnedAint++;
 	}
 	
 	return %hash;
