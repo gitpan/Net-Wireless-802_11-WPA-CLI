@@ -11,11 +11,11 @@ Net::Wireless::802_11::WPA::CLI - Provides a interface to wpa_cli.
 
 =head1 VERSION
 
-Version 2.0.0
+Version 2.0.1
 
 =cut
 
-our $VERSION = '2.0.0';
+our $VERSION = '2.0.1';
 
 
 =head1 SYNOPSIS
@@ -46,10 +46,14 @@ sub new {
 		error=>undef,
 		errorString=>'',
 		perror=>undef,
-		socket=>'-p '.shell_quote($socket),
+		socket=>'',
 		module=>'Net-Wireless-802_11-WPA-CLI',
 	};
 	bless $self;
+
+	if( defined( $socket ) ){
+		$self->{socket}='-p '.shell_quote($socket);
+	}
 
 	#tests if it is usable.
 	my $command='wpa_cli '.$self->{socket}.' status';
@@ -765,12 +769,9 @@ This is a internal function.
 #this is a internal function used by this module
 #It breaks down that return from status.
 sub status_breakdown{
-	my ($self, $statusS, $type)= @_;
+	my $statusS=$_[0];
+	my $type=$_[1];
 
-	if(! $self->errorblank){
-		return undef;
-	}
-	
 	my %hash;
 	
 	my @statusA=split(/\n/, $statusS);
@@ -779,10 +780,7 @@ sub status_breakdown{
 		$type="status"
 	}
 	
-	if (! $statusA[0] =~ /^Selected interface/){
-		$self->{error}=2;
-		$self->{errorString}="Unexpected return from 'wpa_cli ".$type."': ".$statusA[0].'"';
-		$self->warn;
+	if ( $statusA[0] !~ /^Selected interface/){
 		return undef;
 	}
 	

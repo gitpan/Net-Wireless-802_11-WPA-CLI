@@ -1,5 +1,8 @@
 Revision history for Net-Wireless-802_11-WPA-CLI
 
+2.0.1	 2011-08-18/10:10
+		 -Fix some initialization errors and issues with status_breakdown.
+
 2.0.0	 2011-08-18/08:15
 		 -Now uses Error::Helper.
 		 -Allows for a control socket to be specified.
