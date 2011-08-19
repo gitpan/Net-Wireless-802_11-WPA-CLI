@@ -1,5 +1,15 @@
 Revision history for Net-Wireless-802_11-WPA-CLI
 
+2.1.0	 2011-08-19/06:00
+		 -Add missing dependency to Makefile.PL.
+		 -POD cleanup.
+		 -get_network no longer removes quotes
+		 -Add the methods below.
+		 	  bss
+			  scan
+			  scan_results
+			  get_capability
+
 2.0.2	 2011-08-18/10:40
 		 -list_networks now properly parses the returned data.
 
